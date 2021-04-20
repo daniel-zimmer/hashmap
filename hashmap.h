@@ -1,8 +1,6 @@
 #ifndef HASHMAP_H
 #define HASHMAP_H
 
-#define HASHMAP_INIT_CAP 100
-
 typedef struct hashmap Hashmap;
 
 Hashmap *HASHMAP_create();

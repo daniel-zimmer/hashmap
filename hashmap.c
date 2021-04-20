@@ -4,6 +4,9 @@
 #include <string.h>
 #include <stdint.h>
 
+#define PERTURB_SHIFT 5
+#define HASHMAP_INIT_CAP 16
+
 struct hashmap {
 	uint32_t size;
 	uint32_t cap;
@@ -15,14 +18,22 @@ struct hashmap {
 };
 
 static uint64_t hash(char *key) {
-	uint64_t h_val = 0;
+	uint64_t h_val = *key << 7;
+	uint32_t len = 0;
 	while (*key != '\0') {
-		h_val = (h_val << 5) - h_val + *(key++);
+		h_val = h_val * 1000003 ^ *key;
+		key++;
+		len++;
 	}
-	return h_val;
+	return h_val ^ len;
 }
 
-static Hashmap *create(int cap) {
+static uint32_t collision(uint32_t idx, uint32_t perturb,  uint32_t cap) {
+	//     (      (idx*5)    + 1) % cap;
+	return ((idx << 2) + idx + 1) % cap;
+}
+
+static Hashmap *create(uint32_t cap) {
 	Hashmap *hm = malloc(
 		sizeof(struct hashmap) +
 		sizeof(struct bucket) * cap
@@ -32,7 +43,7 @@ static Hashmap *create(int cap) {
 	hm->cap = cap;
 
 	for (int i = 0; i < hm->cap; i++) {
-		hm->bucket[i].key  = NULL;
+		hm->bucket[i].key = NULL;
 	}
 
 	return hm;
@@ -48,8 +59,11 @@ static Hashmap *resize(Hashmap *old) {
 
 	for (int i = 0; i < old->cap; i++) {
 		uint64_t index = old->bucket[i].hash%new->cap;
+		uint32_t perturb = old->bucket[i].hash;
+
 		while (new->bucket[index].key != NULL) {
-			index = (index + 1)%new->cap;
+			index = collision(index, perturb, new->cap);
+			perturb >>= PERTURB_SHIFT;
 		}
 
 		new->bucket[index].key   = old->bucket[i].key;
@@ -63,6 +77,7 @@ static Hashmap *resize(Hashmap *old) {
 
 Hashmap *HASHMAP_put(Hashmap *hm, char *key, void *value) {
 	uint64_t hash_val = hash(key);
+	uint32_t perturb = hash_val;
 
 	if (hm->size > hm->cap>>1) {
 		hm = resize(hm);
@@ -76,7 +91,8 @@ Hashmap *HASHMAP_put(Hashmap *hm, char *key, void *value) {
 		) {
 			break;
 		}
-		index = (index + 1)%hm->cap;
+		index = collision(index, perturb, hm->cap);
+		perturb >>= PERTURB_SHIFT;
 	}
 
 	hm->bucket[index].key   = strdup(key);
@@ -89,6 +105,7 @@ Hashmap *HASHMAP_put(Hashmap *hm, char *key, void *value) {
 
 void *HASHMAP_get(Hashmap *hm, char *key) {
 	uint64_t hash_val = hash(key);
+	uint32_t perturb = hash_val;
 
 	uint64_t index = hash_val%hm->cap;
 	while (hm->bucket[index].key != NULL) {
@@ -99,7 +116,8 @@ void *HASHMAP_get(Hashmap *hm, char *key) {
 			return hm->bucket[index].value;
 		}
 
-		index = (index + 1) % hm->cap;
+		index = collision(index, perturb, hm->cap);
+		perturb >>= PERTURB_SHIFT;
 	}
 
 	return NULL;
