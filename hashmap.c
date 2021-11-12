@@ -8,12 +8,12 @@
 #define HASHMAP_INIT_CAP 16
 
 struct hashmap {
-	uint32_t size;
-	uint32_t cap;
+	uint64_t size;
+	uint64_t cap;
 	struct bucket {
-		char     *key;
-		uint64_t  hash;
-		void     *value;
+		char        *key;
+		uint64_t     hash;
+		HASHMAP_type value;
 	} bucket[];
 };
 
@@ -76,7 +76,7 @@ static Hashmap *resize(Hashmap *old) {
 	return new;
 }
 
-Hashmap *HASHMAP_put(Hashmap *hm, char *key, void *value) {
+Hashmap *HASHMAP_put(Hashmap *hm, char *key, HASHMAP_type value) {
 	uint64_t hash_val = hash(key);
 	uint32_t perturb  = hash_val;
 
@@ -105,7 +105,7 @@ Hashmap *HASHMAP_put(Hashmap *hm, char *key, void *value) {
 	return hm;
 }
 
-void *HASHMAP_get(Hashmap *hm, char *key) {
+HASHMAP_type *HASHMAP_get(Hashmap *hm, char *key) {
 	uint64_t hash_val = hash(key);
 	uint32_t perturb  = hash_val;
 
@@ -115,7 +115,7 @@ void *HASHMAP_get(Hashmap *hm, char *key) {
 			hm->bucket[index].hash == hash_val &&
 			!strcmp(hm->bucket[index].key, key)
 		) {
-			return hm->bucket[index].value;
+			return &hm->bucket[index].value;
 		}
 
 		index = collision(index, perturb, hm->cap);
@@ -130,23 +130,25 @@ uint32_t HASHMAP_size(Hashmap *hm) {
 	return hm->size;
 }
 
-void HASHMAP_iterate(Hashmap *hm, void (*iterFunc) (char *, void *)) {
+void HASHMAP_iterate(Hashmap *hm, void (*iterFunc) (char *, HASHMAP_type *)) {
 	for (uint32_t i = 0; i < hm->cap; i++) {
 		if (hm->bucket[i].key == NULL) continue;
-		iterFunc(hm->bucket[i].key, hm->bucket[i].value);
+		iterFunc(hm->bucket[i].key, &hm->bucket[i].value);
 	}
 }
 
-void HASHMAP_freeDel(void *value) {
-	free(value);
+void HASHMAP_freeDestroy(HASHMAP_type *value) {
+	if (value->type == HASHMAP_type_ptr) {
+		free(value->ptr);
+	}
 }
 
-void HASHMAP_delete(Hashmap *hm, void (*delFunc) (void *)) {
+void HASHMAP_destroy(Hashmap *hm, void (*delFunc) (HASHMAP_type *)) {
 	for (uint32_t i = 0; i < hm->cap; i++) {
 		if (hm->bucket[i].key == NULL) continue;
 
 		if (delFunc != NULL) {
-			delFunc(hm->bucket[i].value);
+			delFunc(&hm->bucket[i].value);
 		}
 		free(hm->bucket[i].key);
 	}
